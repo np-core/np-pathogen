@@ -23,17 +23,15 @@ log.info """
 outdir          : $params.outdir
 observe         : $params.observe
 
-ont             : $params.ont
-basecall        : $params.basecall
-model           : $params.models
+dna             : $params.dna
 barcodes        : $params.barcodes
 quality         : $params.quality
 length          : $params.length
 
 - Controls -
 
-batch_control    : ... flags?
-negative_control : ... flags?
+batch_control    : null
+negative_control : null
 
 - Virus detection -
 
@@ -46,8 +44,6 @@ signature       : $params.signature
 
 - RNA Nanopore -
 
-...
-
 - DNA Illumina -
 
 illumina        : $params.illumina
@@ -56,7 +52,6 @@ opts            : $params.illumina_opts
 
 - RNA Illumina -
 
-...
 
 --------------------------------------
 """
@@ -70,7 +65,7 @@ if (params.observe) {
 
 } else {
     Channel
-        .fromPath(params.ont)
+        .fromPath(params.dna)
         .map { file -> tuple(file.baseName, file) }
         .into { fastq_nanopore; nanostat_pre };
 }
@@ -86,75 +81,95 @@ process NanoStatPre {
     set id, file(fq) from nanostat_pre
 
     output:
-    file("${id}.pre.stats.txt")
+    file("${id}.prestats.txt")
 
     """
-    NanoStat --threads $task.cpus --fastq $fq > ${id}.pre.stats.txt
-    """
-
-}
-
-process NanoFilt {
-
-    // TODO: make this optional
-
-    tag { id }
-    label "ont"
-
-    publishDir "$params.outdir/fastq", mode: "copy", pattern: "*.txt"
-
-    input:
-    set id, file(fq) from fastq_nanopore
-
-    output:
-    set id, file("${id}.filtered.fq") into (nanostat_post, nanotax)
-
-    """
-    NanoFilt --quality $params.quality --length $params.length $fq > ${id}.filtered.fq
+    NanoStat --threads $task.cpus --fastq $fq > ${id}.prestats.txt
     """
 
 }
 
-process NanoStatPost {
-    
-    tag { id }
-    label "ont"
+if (params.prefilter) {
 
-    publishDir "$params.outdir/fastq", mode: "copy", pattern: "*.txt"
+    process NanoFilt {
 
-    input:
-    set id, file(fq) from nanostat_post
+        // TODO: make this optional
 
-    output:
-    file("${id}.post.stats.txt")
+        tag { id }
+        label "ont"
 
-    """
-    NanoStat --threads $task.cpus --fastq $fq > ${id}.post.stats.txt
-    """
+        publishDir "$params.outdir/fastq", mode: "copy", pattern: "*.txt"
 
+        input:
+        set id, file(fq) from fastq_nanopore
+
+        output:
+        set id, file("${id}.filtered.fq") into (nanostat_post, nanotax)
+
+        """
+        NanoFilt --quality $params.quality --length $params.length $fq > ${id}.filtered.fq
+        """
+
+    }
+
+    process NanoStatPost {
+        
+        tag { id }
+        label "ont"
+
+        publishDir "$params.outdir/fastq", mode: "copy", pattern: "*.txt"
+
+        input:
+        set id, file(fq) from nanostat_post
+
+        output:
+        file("${id}.poststats.txt")
+
+        """
+        NanoStat --threads $task.cpus --fastq $fq > ${id}.poststats.txt
+        """
+
+    }
+
+} else {
+    fastq_nanopore.set { nanotax }
 }
+
 
 process Kraken2 {
 
     // TODO: Split processing into own rule (+ control)
 
     label "kraken2"
-    publishDir "$params.port_out", mode: "copy"
+    publishDir "$params.outdir/kraken", mode: "copy", pattern: "*.tar.gz"
 
     input:
     set id, file(fq) from nanotax
 
     output:
-    file("${id}.kraken.tar.gz")
-    file("${id}.png")
-    file("${id}.json")
+    set id, file("${id}.out"), file("${id}.report") into nanopath_kraken_server
+    file("${id}.tar.gz")
 
     """
     kraken2 --db $params.taxdb --threads $task.cpus --output ${id}.out --report ${id}.report --use-names $fq
-    
-    np-server process-kraken --report ${id}.report --prefix ${id} -c Blues --level S --top 10
+    tar -cvzf ${id}.tar.gz ${id}.out ${id}.report
+    """
 
-    tar -czvf ${id}.kraken.tar.gz ${id}.report ${id}.out ${id}.png
+}
+
+process NanoPathKraken {
+
+    label "ont"
+    publishDir "$params.outdir", mode: "copy"
+    
+    input:
+    set id, file(reads), file(report) from nanopath_kraken_server
+
+    output:
+    file("${id}.json")
+    
+    """
+    nanopath server process-kraken -r $report -f $reads -o ${id}.json
     """
 
 }
@@ -294,7 +309,7 @@ if (params.illumina) {
                     }
                     .filter { it != null }
     
-    process MedakaPilon {
+    process PilonCorrection {
 
         tag { aid }
         label "pilon"
