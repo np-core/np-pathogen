@@ -1,0 +1,6 @@
+[submodule "modules"]
+	path = modules
+	url = https://github.com/np-core/modules
+[submodule "configs"]
+	path = configs
+	url = https://github.com/np-core/configs
