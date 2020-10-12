@@ -237,88 +237,81 @@ def get_paired_fastq(glob){
     return channel.fromFilePairs(glob, flat: true)
 }
 
-include { LinkAssemblyOnline } from './modules/pathogen'
-include { NanoqOnline } from './modules/nanoq'
-include { DeepHostRemovalOnline } from './modules/pathogen'
-include { RavenRegexOnline } from './modules/raven' 
-include { KrakenOnline as ReadKrakenOnline } from './modules/kraken'
-include { KrakenAssemblyOnline as RavenKrakenOnline } from './modules/kraken'
+// include { LinkAssemblyOnline } from './modules/pathogen'
+// include { NanoqOnline } from './modules/nanoq'
+// include { DeepHostRemovalOnline } from './modules/pathogen'
+// include { RavenRegexOnline } from './modules/raven' 
+// include { KrakenOnline as ReadKrakenOnline } from './modules/kraken'
+// include { KrakenAssemblyOnline as RavenKrakenOnline } from './modules/kraken'
 
-// Online MAG assembly evey few batches
+// // Online MAG assembly evey few batches
 
-workflow ont_assembly_online {
-    take:
-        read_batch
-    main:   
-        // Continous metagenome assembly across barcode regex
-        LinkAssemblyOnline(read_batch)  // dummy process to symlink fastq into output directory for updated mag assembly < params.assembly_update > - ensures presence of files before metagenome assembly
-        RavenRegexOnline(LinkAssemblyOnline.out, assembly_update) // fast mag assembly with raven by barcode every < params.assembly_every > batches, across all regex groups (barcoded) in linked fastq
-        RavenKrakenOnline(RavenRegexOnline.out, db)  // contig classification for approximate mags
-    emit:
-        RavenKrakenOnline.out
-}
+// workflow ont_assembly_online {
+//     take:
+//         read_batch
+//     main:   
+//         // Continous metagenome assembly across barcode regex
+//         LinkAssemblyOnline(read_batch)  // dummy process to symlink fastq into output directory for updated mag assembly < params.assembly_update > - ensures presence of files before metagenome assembly
+//         RavenRegexOnline(LinkAssemblyOnline.out, assembly_update) // fast mag assembly with raven by barcode every < params.assembly_every > batches, across all regex groups (barcoded) in linked fastq
+//         RavenKrakenOnline(RavenRegexOnline.out, db)  // contig classification for approximate mags
+//     emit:
+//         RavenKrakenOnline.out
+// }
 
 
-// Online (batch-wise) classification 
+// // Online (batch-wise) classification 
 
-workflow ont_dna_online {
-    take:
-        read_batch // id, fq, batch #
-    main:
-        NanoqOnline(read_batch)
-        DeepHostRemovalOnline(NanoqOnline.out[0], host_database, host_reference) // hard filter on read quality > 5 and read length > 50 bp to remove highly fragmented reads (if called at all)
-        ReadKrakenOnline(DeepHostRemovalOnline.out[0], db) // taxonomic classification of reads and abundance estimation, kraken + bracken 
-    emit:
-        ReadKrakenOnline.out
-}
+// workflow ont_dna_online {
+//     take:
+//         read_batch // id, fq, batch #
+//     main:
+//         NanoqOnline(read_batch)
+//         DeepHostRemovalOnline(NanoqOnline.out[0], host_database, host_reference) // hard filter on read quality > 5 and read length > 50 bp to remove highly fragmented reads (if called at all)
+//         ReadKrakenOnline(DeepHostRemovalOnline.out[0], db) // taxonomic classification of reads and abundance estimation, kraken + bracken 
+//     emit:
+//         ReadKrakenOnline.out
+// }
 
 
 // Workflow to launch assembly and coverage mapping from dashboard
 
-workflow ont_dna_launch {
-    take:
-        reads // id, fq
-    main: 
-        ReadKrakenOffline(reads, db) // taxonomic classification of reads and abundance estimation, kraken + bracken
-        // fast or high quality metagenome assembly
-        if (params.assembler == "raven"){
-            contigs = MetaRavenRegex()
-        } else {
-            contigs = MetaFlyeRegex(DeepHostRemovalOffline.out[0])
-        }
-        FlyeKrakenOffline(contigs[0], db)  // mag taxonomic classification 
-    emit:
-        MetaFlyeOffline.out[0]
-        MetaFlyeOffline.out[1]
-        ReadKrakenOffline.out
-        FlyeKrakenOffline.out
-}
+// workflow ont_dna_launch {
+//     take:
+//         reads // id, fq
+//     main: 
+//         ReadKrakenOffline(reads, db) // taxonomic classification of reads and abundance estimation, kraken + bracken
+//         // fast or high quality metagenome assembly
+//         if (params.assembler == "raven"){
+//             contigs = MetaRavenRegex()
+//         } else {
+//             contigs = MetaFlyeRegex(DeepHostRemovalOffline.out[0])
+//         }
+//         FlyeKrakenOffline(contigs[0], db)  // mag taxonomic classification 
+//     emit:
+//         MetaFlyeOffline.out[0]
+//         MetaFlyeOffline.out[1]
+//         ReadKrakenOffline.out
+//         FlyeKrakenOffline.out
+// }
 
 
 
 // Offline (non-batch, completed) ONT DNA
 
-include { DeepHostRemovalOffline } from './modules/pathogen'
 include { MetaFlye as MetaFlyeOffline } from './modules/flye'
 include { NanoqOffline } from './modules/nanoq'
 include { Kraken as ReadKrakenOffline } from './modules/kraken'
 include { Kraken as FlyeKrakenOffline } from './modules/kraken'
-include { FileGroupRegex } from './modules/pathogen'
 
 workflow ont_dna_offline {
     take:
         reads // id, fq
     main: 
         NanoqOffline(reads) // emitted / analysed individually
-        DeepHostRemovalOffline(NanoqOffline.out[0], host_database, host_reference) // remove host reads deep clean with kraken host and reference mapping
-        ReadKrakenOffline(DeepHostRemovalOffline.out[0], db) // taxonomic classification of reads and abundance estimation, kraken + bracken
-        MetaFlyeOffline(DeepHostRemovalOffline.out[0])  // high quality metagenome assembly
-        FlyeKrakenOffline(MetaFlyeOffline.out[0], db)  // mag taxonomic classification 
+        ReadKrakenOffline(NanoqOffline.out[0], db) // taxonomic classification of reads and abundance estimation, kraken + bracken
+
     emit:
-        MetaFlyeOffline.out[0]
-        MetaFlyeOffline.out[1]
         ReadKrakenOffline.out
-        FlyeKrakenOffline.out
 }
 
 workflow {
