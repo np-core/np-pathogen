@@ -186,11 +186,11 @@ assembly_update_directory.mkdirs() // Create the update dir so it ...
 assembly_update = file(params.assembly_update) // ... can be declared as input
 
 
-check_file(params.host_database)
-check_file(params.host_reference)
+// check_file(params.host_database)
+// check_file(params.host_reference)
 
-params.taxonomy_databases.each { check_file(it) }
-params.coverage_databases.each { check_file(it) }
+// params.taxonomy_databases.each { check_file(it) }
+// params.coverage_databases.each { check_file(it) }
 
 // Parameter checks and variable configuratons
 
