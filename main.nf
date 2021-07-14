@@ -299,7 +299,6 @@ def get_paired_fastq(glob){
 // Offline (non-batch, completed) ONT DNA
 
 include { MetaFlye as MetaFlyeOffline } from './modules/flye'
-include { NanoqOffline } from './modules/nanoq'
 include { Kraken as ReadKrakenOffline } from './modules/kraken'
 include { Kraken as FlyeKrakenOffline } from './modules/kraken'
 
@@ -307,9 +306,7 @@ workflow ont_dna_offline {
     take:
         reads // id, fq
     main: 
-        NanoqOffline(reads) // emitted / analysed individually
         ReadKrakenOffline(NanoqOffline.out[0], db) // taxonomic classification of reads and abundance estimation, kraken + bracken
-
     emit:
         ReadKrakenOffline.out
 }
@@ -326,9 +323,9 @@ workflow {
             get_single_files(_fastq_ont)  // not implemented yet: ONT RNA
         } else {
             if (params.online){
-                get_batch_fastq(_fastq_ont) |  ont_dna_online                                 // online barcoded taxonomic abundance and real-time (approximate) mag assembly, coverage mapping
+                get_batch_fastq(_fastq_ont) |  ont_dna_online  // online barcoded taxonomic abundance and real-time (approximate) mag assembly, coverage mapping
             } else {
-                get_single_fastq(_fastq_ont) |  ont_dna_offline                               // offline barcoded taxonomic abundance and approximate mag assembly, coverage mapping
+                get_single_fastq(_fastq_ont) |  ont_dna_offline  // offline barcoded taxonomic abundance and approximate mag assembly, coverage mapping
             }
         }
     }
