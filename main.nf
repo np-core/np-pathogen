@@ -306,7 +306,7 @@ workflow ont_dna_offline {
     take:
         reads // id, fq
     main: 
-        ReadKrakenOffline(NanoqOffline.out[0], db) // taxonomic classification of reads and abundance estimation, kraken + bracken
+        ReadKrakenOffline(reads, db) // taxonomic classification of reads and abundance estimation, kraken + bracken
     emit:
         ReadKrakenOffline.out
 }
